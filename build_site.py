@@ -10,29 +10,51 @@
 """
 from __future__ import annotations
 
+import calendar
 import datetime as dt
 import json
 import sqlite3
 from pathlib import Path
 
+import yaml
+
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "papers.db"
+CONFIG_PATH = BASE_DIR / "config.yaml"
 OUT_DIR = BASE_DIR / "docs"
 OUT_FILE = OUT_DIR / "index.html"
 
 MAX_PAPERS = 2000  # ページに埋め込む最大件数（新着順）
 
 
+def _months_ago(d: dt.date, months: int) -> dt.date:
+    y, m = d.year, d.month - months
+    while m <= 0:
+        m += 12
+        y -= 1
+    day = min(d.day, calendar.monthrange(y, m)[1])
+    return d.replace(year=y, month=m, day=day)
+
+
+def display_cutoff() -> dt.date:
+    months = 3
+    if CONFIG_PATH.exists():
+        with CONFIG_PATH.open(encoding="utf-8") as f:
+            months = int((yaml.safe_load(f) or {}).get("display_months", 3))
+    return _months_ago(dt.date.today(), months)
+
+
 def load_papers() -> list[dict]:
     if not DB_PATH.exists():
         return []
+    cutoff = display_cutoff().isoformat()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         "SELECT source, source_id, title, abstract, journal, published, url, "
-        "fetched_at FROM papers "
+        "fetched_at FROM papers WHERE published >= ? "
         "ORDER BY published DESC, fetched_at DESC LIMIT ?",
-        (MAX_PAPERS,),
+        (cutoff, MAX_PAPERS),
     ).fetchall()
     conn.close()
     papers = []
@@ -124,6 +146,9 @@ HTML = r"""<!doctype html>
 
   <div class="controls">
     <input type="text" id="q" placeholder="タイトル・アブストラクトを検索" oninput="render()">
+    <select id="journal" onchange="render()">
+      <option value="">すべての雑誌</option>
+    </select>
     <select id="source" onchange="render()">
       <option value="">すべての取得元</option>
     </select>
@@ -177,6 +202,15 @@ HTML = r"""<!doctype html>
       o.value = s; o.textContent = s; sel.appendChild(o);
     });
 
+    // --- 雑誌プルダウン（件数つき） ---
+    const jsel = document.getElementById("journal");
+    const jcount = {};
+    PAPERS.forEach(p => { jcount[p.journal] = (jcount[p.journal] || 0) + 1; });
+    Object.keys(jcount).sort().forEach(j => {
+      const o = document.createElement("option");
+      o.value = j; o.textContent = `${j} (${jcount[j]})`; jsel.appendChild(o);
+    });
+
     // --- 既読トグル ---
     function toggleRead(id) {
       if (readSet.has(id)) readSet.delete(id); else readSet.add(id);
@@ -194,10 +228,12 @@ HTML = r"""<!doctype html>
     function render() {
       const q = document.getElementById("q").value.toLowerCase().trim();
       const src = document.getElementById("source").value;
+      const jr = document.getElementById("journal").value;
       const unreadOnly = document.getElementById("unreadOnly").checked;
 
       const filtered = PAPERS.filter(p => {
         if (src && p.source !== src) return false;
+        if (jr && p.journal !== jr) return false;
         if (unreadOnly && readSet.has(p.id)) return false;
         if (q) {
           const hay = (p.title + " " + (p.abstract || "")).toLowerCase();

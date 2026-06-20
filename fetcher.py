@@ -13,7 +13,10 @@ SQLite で重複を排除して新着のみを保存・通知する。
 from __future__ import annotations
 
 import argparse
+import calendar
 import datetime as dt
+import html as html_mod
+import re
 import smtplib
 import sqlite3
 import sys
@@ -304,6 +307,68 @@ def _strip_tags(s: str) -> str:
     return " ".join("".join(out).split())
 
 
+def months_ago(d: dt.date, months: int) -> dt.date:
+    """d から months か月前の日付を返す。"""
+    y, m = d.year, d.month - months
+    while m <= 0:
+        m += 12
+        y -= 1
+    day = min(d.day, calendar.monthrange(y, m)[1])
+    return d.replace(year=y, month=m, day=day)
+
+
+# ------------------------------------------------------------------------
+# 抄録の自動取得（J-STAGE 記事ページから。検索 API は抄録を返さないため）
+# ------------------------------------------------------------------------
+_JSTAGE_ABS_RE = re.compile(
+    r'<div id="article-overiew-abstract-wrap".*?>(.*?)</div>\s*</div>', re.S
+)
+
+
+def fetch_jstage_abstract(url: str) -> str:
+    """J-STAGE 記事ページから抄録テキストを取り出す。取れなければ空文字。"""
+    resp = requests.get(
+        url, headers={"User-Agent": USER_AGENT}, timeout=REQUEST_TIMEOUT
+    )
+    resp.raise_for_status()
+    m = _JSTAGE_ABS_RE.search(resp.text)
+    if not m:
+        return ""
+    text = re.sub(r"<[^>]+>", " ", m.group(1))
+    text = html_mod.unescape(re.sub(r"\s+", " ", text)).strip()
+    # 先頭の「抄録」「Abstract」ラベルを除去
+    return re.sub(r"^\s*(抄\s*録|Abstract)\s*", "", text)
+
+
+def enrich_abstracts(conn: sqlite3.Connection, cutoff: dt.date) -> None:
+    """表示対象（cutoff 以降）で抄録が空の J-STAGE 論文に抄録を補完する。"""
+    rows = conn.execute(
+        "SELECT source, source_id, url FROM papers "
+        "WHERE source = 'jstage' AND (abstract IS NULL OR abstract = '') "
+        "AND published >= ? ORDER BY published DESC",
+        (cutoff.isoformat(),),
+    ).fetchall()
+    if not rows:
+        return
+    print(f"  抄録の自動取得: 対象 {len(rows)} 件")
+    done = 0
+    for source, source_id, url in rows:
+        try:
+            ab = fetch_jstage_abstract(url)
+        except Exception as e:  # noqa: BLE001 - 1件の失敗で止めない
+            print(f"  ! 抄録取得失敗 {url}: {e}", file=sys.stderr)
+            ab = ""
+        if ab:
+            conn.execute(
+                "UPDATE papers SET abstract = ? WHERE source = ? AND source_id = ?",
+                (ab, source, source_id),
+            )
+            done += 1
+        time.sleep(1)  # 記事ページへのレート配慮
+    conn.commit()
+    print(f"  抄録を {done} 件補完しました")
+
+
 # ------------------------------------------------------------------------
 # 通知
 # ------------------------------------------------------------------------
@@ -434,6 +499,11 @@ def run(cfg: dict, dry_run: bool = False) -> None:
     for p in new_papers:
         save_paper(conn, p)
     conn.commit()
+
+    # 表示対象（直近 display_months か月）で抄録が空のものを補完
+    if cfg.get("fetch_abstracts", True):
+        cutoff = months_ago(dt.date.today(), int(cfg.get("display_months", 3)))
+        enrich_abstracts(conn, cutoff)
 
     if new_papers:
         notify(new_papers, cfg.get("email", {}))
