@@ -51,11 +51,41 @@ lookback_days: 7      # 何日前までを新着とするか
 `config.yaml` の `email.enabled` を `true` にし、Gmail の場合は
 [アプリパスワード](https://myaccount.google.com/apppasswords)を `password` に設定します。
 
+## スマホから見る（GitHub Pages 方式）
+常時稼働サーバーを使わず、1日1回 DB から静的 HTML を生成して GitHub に push し、
+GitHub Pages で公開します。スマホからどこでも閲覧でき、Mac がスリープでも見られます。
+検索・絞り込みはページ内 JavaScript で動きます。
+
+> 注意: 無料アカウントの GitHub Pages は **公開**（URL を知る人は誰でも閲覧可）です。
+> 公開されるのは論文のタイトル・アブストラクト・リンクのみで、`config.yaml` や
+> `papers.db` は `.gitignore` で除外され push されません。
+
+### 初回セットアップ
+```bash
+# 静的サイトを生成
+.venv/bin/python build_site.py
+
+# GitHub にリポジトリを作成して push（リポジトリは事前に GitHub 上で作成）
+git remote add origin https://github.com/<あなたのユーザー名>/<リポジトリ名>.git
+git push -u origin main
+```
+push 後、GitHub のリポジトリ画面で **Settings → Pages → Build and deployment**:
+- Source: `Deploy from a branch`
+- Branch: `main` / フォルダ `/docs` を選んで Save
+
+数分後、`https://<ユーザー名>.github.io/<リポジトリ名>/` で閲覧できます。
+このURLをスマホのホーム画面に追加すればアプリのように使えます。
+
+### 毎日自動更新
+`daily.sh` が「取得 → サイト生成 → push」を一括で行います。下記の cron 例を参照。
+
 ## 定期実行（cron）
-`crontab -e` に以下を追記すると毎朝 8 時に実行されます（パスは環境に合わせて変更）:
+`crontab -e` に以下を追記すると毎朝 8 時に「取得 → サイト生成 → push」を実行します:
 ```
-0 8 * * * /Users/asadasoichiro/claudeworks/paper_fetcher/.venv/bin/python /Users/asadasoichiro/claudeworks/paper_fetcher/fetcher.py >> /Users/asadasoichiro/claudeworks/paper_fetcher/cron.log 2>&1
+0 8 * * * /Users/asadasoichiro/claudeworks/paper_fetcher/daily.sh >> /Users/asadasoichiro/claudeworks/paper_fetcher/cron.log 2>&1
 ```
+（GitHub Pages を使わずローカル保存だけで良ければ、`daily.sh` の代わりに
+`.venv/bin/python fetcher.py` を指定してください）
 
 macOS では端末に「フルディスクアクセス」権限が必要な場合があります
 （システム設定 → プライバシーとセキュリティ）。
