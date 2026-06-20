@@ -20,12 +20,15 @@ echo "===== $(date '+%Y-%m-%d %H:%M:%S') daily run ====="
 # 2. 静的サイト生成
 "$PYTHON" build_site.py
 
-# 3. 変更があれば push
+# 3. 変更があればコミット（リモートが設定済みなら push）
 if [[ -n "$(git status --porcelain docs/)" ]]; then
   git add docs/
   git commit -m "Update papers $(date '+%Y-%m-%d')"
-  git push
-  echo "push 完了"
+  if git remote get-url origin >/dev/null 2>&1; then
+    git push && echo "push 完了"
+  else
+    echo "コミット完了（GitHub リモート未設定のため push はスキップ）"
+  fi
 else
-  echo "新規論文なし（push スキップ）"
+  echo "新規論文なし（コミットなし）"
 fi
