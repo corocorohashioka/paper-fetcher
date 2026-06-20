@@ -20,7 +20,7 @@ DB_PATH = BASE_DIR / "papers.db"
 OUT_DIR = BASE_DIR / "docs"
 OUT_FILE = OUT_DIR / "index.html"
 
-MAX_PAPERS = 1000  # ページに埋め込む最大件数（新着順）
+MAX_PAPERS = 2000  # ページに埋め込む最大件数（新着順）
 
 
 def load_papers() -> list[dict]:

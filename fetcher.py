@@ -363,9 +363,11 @@ def collect(cfg: dict) -> list[Paper]:
 
     cr = sources.get("crossref", {})
     if cr.get("enabled"):
+        # Crossref は years_back で過去分を取り込み、新着判定は DB 重複排除に任せる
+        cr_since = dt.date.today() - dt.timedelta(days=365 * int(cr.get("years_back", 2)))
         for journal in cr.get("journals", []):
             try:
-                got = fetch_crossref(journal, cr.get("rows", 50), since)
+                got = fetch_crossref(journal, cr.get("rows", 60), cr_since)
                 print(f"  Crossref [{journal.get('name')}]: {len(got)} 件取得")
                 collected.extend(got)
             except Exception as e:  # noqa: BLE001 - 1誌の失敗で全体を止めない
