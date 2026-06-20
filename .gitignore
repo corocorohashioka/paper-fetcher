@@ -12,3 +12,6 @@ config.yaml
 
 # macOS
 .DS_Store
+
+# プレビュー用ローカル設定
+.claude/
