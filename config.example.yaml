@@ -1,0 +1,51 @@
+# ========================================================================
+# 論文取得アプリ 設定ファイル
+# 対象ジャーナル・キーワード・通知先をここで指定します。
+# ========================================================================
+
+sources:
+  # --- Crossref: ISSN を指定するとほぼ全出版社のジャーナルを取得できます ---
+  # ISSN は各ジャーナルの公式サイトや https://portal.issn.org で確認できます。
+  # （オンライン版・印刷版どちらの ISSN でも可）
+  crossref:
+    enabled: true
+    journals:
+      - name: "Nature"
+        issn: "1476-4687"
+      - name: "Science"
+        issn: "1095-9203"
+      # - name: "Cell"
+      #   issn: "1097-4172"
+    rows: 50          # 1ジャーナルあたりの最大取得件数
+
+  # --- arXiv: プレプリント。カテゴリで指定します ---
+  # カテゴリ一覧: https://arxiv.org/category_taxonomy
+  arxiv:
+    enabled: false
+    categories:
+      - "cs.AI"
+      - "cs.LG"
+    max_results: 50
+
+# タイトル・抄録にこのキーワードのいずれかを含む論文だけを通知します。
+# 空リスト [] にするとフィルタなし（全件）になります。大文字小文字は無視。
+keywords: []
+  # - machine learning
+  # - transformer
+
+# 何日前までに公開された論文を「新着」として扱うか
+lookback_days: 7
+
+# ========================================================================
+# メール通知（任意）。enabled: false ならコンソールとファイルにのみ出力します。
+# Gmail を使う場合は「アプリパスワード」を発行して password に設定してください。
+# https://myaccount.google.com/apppasswords
+# ========================================================================
+email:
+  enabled: false
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  username: ""
+  password: ""
+  from_addr: ""
+  to_addr: "souichirou.coc.0619@gmail.com"
