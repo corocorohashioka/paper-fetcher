@@ -204,6 +204,70 @@ def fetch_arxiv(category: str, max_results: int) -> list[Paper]:
 
 
 # ------------------------------------------------------------------------
+# 取得元: J-STAGE（日本の学会誌。Crossref に無い和文誌に対応）
+# ------------------------------------------------------------------------
+def _jstage_bilingual(parent: ET.Element, path: str) -> str:
+    """<要素><ja>..</ja><en>..</en></要素> から ja 優先でテキストを取り出す。"""
+    el = parent.find(path, _ATOM)
+    if el is None:
+        return ""
+    for lang in ("a:ja", "a:en"):
+        sub = el.find(lang, _ATOM)
+        if sub is not None and sub.text and sub.text.strip():
+            return sub.text.strip()
+    return ""
+
+
+def fetch_jstage(journal: dict, year_from: int) -> list[Paper]:
+    """J-STAGE WebAPI で雑誌コード(cdjournal)から論文を取得する。"""
+    cd = str(journal["cdjournal"]).strip()
+    name = journal.get("name", cd)
+    params = {
+        "service": 3,            # 3 = 論文検索
+        "cdjournal": cd,
+        "pubyearfrom": year_from,
+        "count": 1000,
+    }
+    resp = requests.get(
+        "https://api.jstage.jst.go.jp/searchapi/do",
+        params=params,
+        headers={"User-Agent": USER_AGENT},
+        timeout=REQUEST_TIMEOUT,
+    )
+    resp.raise_for_status()
+    root = ET.fromstring(resp.text)
+
+    papers: list[Paper] = []
+    for entry in root.findall("a:entry", _ATOM):
+        title = _jstage_bilingual(entry, "a:article_title")
+        url = _jstage_bilingual(entry, "a:article_link") or _text(entry, "a:id")
+        doi = _text(entry, "a:doi")
+        published = _text(entry, "a:updated")[:10]  # YYYY-MM-DD
+
+        authors = []
+        for au in entry.findall("a:author", _ATOM):
+            nm = _text(au, "a:ja/a:name") or _text(au, "a:en/a:name")
+            if nm:
+                authors.append(nm)
+
+        if not title:
+            continue
+        papers.append(
+            Paper(
+                source="jstage",
+                source_id=doi or url,
+                title=title,
+                authors=", ".join(authors),
+                journal=name,
+                published=published,
+                url=url,
+                abstract="",  # J-STAGE 検索 API は抄録を返さない
+            )
+        )
+    return papers
+
+
+# ------------------------------------------------------------------------
 # フィルタ・ユーティリティ
 # ------------------------------------------------------------------------
 def matches_keywords(paper: Paper, keywords: list[str]) -> bool:
@@ -314,17 +378,31 @@ def collect(cfg: dict) -> list[Paper]:
         for cat in ax.get("categories", []):
             try:
                 got = fetch_arxiv(cat, ax.get("max_results", 50))
+                # arXiv は日付指定取得ができないので lookback で期間を絞る
+                got = [p for p in got if within_lookback(p, since)]
                 print(f"  arXiv [{cat}]: {len(got)} 件取得")
                 collected.extend(got)
             except Exception as e:  # noqa: BLE001
                 print(f"  ! arXiv [{cat}] 失敗: {e}", file=sys.stderr)
             time.sleep(3)  # arXiv は 3 秒以上の間隔を推奨
 
-    # 期間・キーワードでフィルタ
-    return [
-        p for p in collected
-        if within_lookback(p, since) and matches_keywords(p, keywords)
-    ]
+    js = sources.get("jstage", {})
+    if js.get("enabled"):
+        # 刊行頻度が低い（季刊等）ため lookback は適用せず、
+        # 直近数年分を取り込んで DB の重複排除で新着を判定する。
+        year_from = dt.date.today().year - int(js.get("years_back", 2))
+        for journal in js.get("journals", []):
+            try:
+                got = fetch_jstage(journal, year_from)
+                print(f"  J-STAGE [{journal.get('name')}]: {len(got)} 件取得")
+                collected.extend(got)
+            except Exception as e:  # noqa: BLE001
+                print(f"  ! J-STAGE [{journal.get('name')}] 失敗: {e}",
+                      file=sys.stderr)
+            time.sleep(1)
+
+    # キーワードでフィルタ（期間絞り込みは各取得元で実施済み）
+    return [p for p in collected if matches_keywords(p, keywords)]
 
 
 def run(cfg: dict, dry_run: bool = False) -> None:
