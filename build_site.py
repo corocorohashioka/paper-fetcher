@@ -51,8 +51,8 @@ def load_papers() -> list[dict]:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
-        "SELECT source, source_id, title, abstract, journal, published, url, "
-        "fetched_at FROM papers WHERE published >= ? "
+        "SELECT source, source_id, title, authors, abstract, journal, published, "
+        "url, fetched_at FROM papers WHERE published >= ? "
         "ORDER BY published DESC, fetched_at DESC LIMIT ?",
         (cutoff, MAX_PAPERS),
     ).fetchall()
@@ -123,6 +123,8 @@ HTML = r"""<!doctype html>
     border-radius: 999px; background: #ef4444; color: #fff; margin-right: 6px;
     vertical-align: middle;
   }
+  .authors { font-size: 13px; color: #555; margin: 0 0 4px; }
+  @media (prefers-color-scheme: dark) { .authors { color: #b8b8b8; } }
   .meta { color: #777; font-size: 13px; margin-bottom: 10px; }
   .tag {
     display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px;
@@ -145,7 +147,7 @@ HTML = r"""<!doctype html>
   <div class="sub">更新: __UPDATED__ ／ 全 __TOTAL__ 件・未読 <b id="unread">0</b> 件</div>
 
   <div class="controls">
-    <input type="text" id="q" placeholder="タイトル・アブストラクトを検索" oninput="render()">
+    <input type="text" id="q" placeholder="タイトル・著者・アブストラクトを検索" oninput="render()">
     <select id="journal" onchange="render()">
       <option value="">すべての雑誌</option>
     </select>
@@ -236,7 +238,7 @@ HTML = r"""<!doctype html>
         if (jr && p.journal !== jr) return false;
         if (unreadOnly && readSet.has(p.id)) return false;
         if (q) {
-          const hay = (p.title + " " + (p.abstract || "")).toLowerCase();
+          const hay = (p.title + " " + (p.authors || "") + " " + (p.abstract || "")).toLowerCase();
           if (!hay.includes(q)) return false;
         }
         return true;
@@ -256,6 +258,7 @@ HTML = r"""<!doctype html>
         <div class="${cls}" data-id="${esc(p.id)}">
           <button class="toggle-read" data-toggle>${isRead ? "未読に戻す" : "既読にする"}</button>
           <div class="title">${isNew ? '<span class="badge-new">NEW</span>' : ""}<a class="paper-link" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a></div>
+          ${p.authors ? `<div class="authors">${esc(p.authors)}</div>` : ""}
           <div class="meta"><span class="tag">${esc(p.source)}</span>${esc(p.journal)} · ${esc(p.published)}</div>
           ${p.abstract
               ? `<div class="abstract">${esc(p.abstract)}</div>`
