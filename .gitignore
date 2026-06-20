@@ -15,3 +15,6 @@ config.yaml
 
 # プレビュー用ローカル設定
 .claude/
+
+# R
+.Rhistory
