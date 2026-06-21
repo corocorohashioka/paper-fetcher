@@ -219,21 +219,26 @@ HTML = r"""<!doctype html>
       saveRead(); render();
     }
     function markRead(id) { readSet.add(id); saveRead(); render(); }
-    function markAllRead() { PAPERS.forEach(p => readSet.add(p.id)); saveRead(); render(); }
-    function markAllUnread() { readSet.clear(); saveRead(); render(); }
+    // 「すべて〜」は現在フィルターで表示中の論文だけを対象にする
+    function markAllRead() {
+      currentFiltered().forEach(p => readSet.add(p.id)); saveRead(); render();
+    }
+    function markAllUnread() {
+      currentFiltered().forEach(p => readSet.delete(p.id)); saveRead(); render();
+    }
 
     function updateUnreadCount() {
       const n = PAPERS.filter(p => !readSet.has(p.id)).length;
       document.getElementById("unread").textContent = n;
     }
 
-    function render() {
+    // 検索・雑誌・取得元・未読のみ の各条件で現在表示すべき論文を返す
+    function currentFiltered() {
       const q = document.getElementById("q").value.toLowerCase().trim();
       const src = document.getElementById("source").value;
       const jr = document.getElementById("journal").value;
       const unreadOnly = document.getElementById("unreadOnly").checked;
-
-      const filtered = PAPERS.filter(p => {
+      return PAPERS.filter(p => {
         if (src && p.source !== src) return false;
         if (jr && p.journal !== jr) return false;
         if (unreadOnly && readSet.has(p.id)) return false;
@@ -243,7 +248,10 @@ HTML = r"""<!doctype html>
         }
         return true;
       });
+    }
 
+    function render() {
+      const filtered = currentFiltered();
       updateUnreadCount();
       const list = document.getElementById("list");
       if (!filtered.length) {
