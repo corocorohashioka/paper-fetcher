@@ -9,14 +9,41 @@ sources:
   # （オンライン版・印刷版どちらの ISSN でも可）
   crossref:
     enabled: true
+    rows: 60          # 1誌あたり取得する「最新何件」か
+    years_back: 2     # これより古い論文は除外する
     journals:
-      - name: "Nature"
-        issn: "1476-4687"
-      - name: "Science"
-        issn: "1095-9203"
-      # - name: "Cell"
-      #   issn: "1097-4172"
-    rows: 50          # 1ジャーナルあたりの最大取得件数
+      - name: "Food Policy"
+        issn: "0306-9192"
+      - name: "American Journal of Agricultural Economics"
+        issn: "0002-9092"
+      - name: "Journal of Agricultural Economics"
+        issn: "0021-857X"
+      - name: "European Review of Agricultural Economics"
+        issn: "0165-1587"
+      - name: "Land Use Policy"
+        issn: "0264-8377"
+      - name: "Agricultural Economics"
+        issn: "0169-5150"
+      - name: "Australian Journal of Agricultural and Resource Economics"
+        issn: "1364-985X"
+      - name: "Applied Economic Perspectives and Policy"
+        issn: "2040-5790"
+
+  # --- J-STAGE: 日本の学会誌（Crossref に無い和文誌に対応） ---
+  # 雑誌コード(cdjournal)で指定します。各誌のコードは記事URL中に含まれます
+  # 例: https://www.jstage.jst.go.jp/article/nokei/... → コードは "nokei"
+  jstage:
+    enabled: true
+    years_back: 3     # 何年分さかのぼって取り込むか（初回の取り込み範囲）
+    journals:
+      - name: "農業経済研究"
+        cdjournal: "nokei"
+      - name: "農業経営研究"
+        cdjournal: "fmsj"
+      - name: "フードシステム研究"
+        cdjournal: "jfsr"
+      - name: "農林業問題研究"
+        cdjournal: "arfe"
 
   # --- arXiv: プレプリント。カテゴリで指定します ---
   # カテゴリ一覧: https://arxiv.org/category_taxonomy
@@ -33,8 +60,14 @@ keywords: []
   # - machine learning
   # - transformer
 
-# 何日前までに公開された論文を「新着」として扱うか
+# 何日前までに公開された論文を「新着」として扱うか（arXiv用）
 lookback_days: 7
+
+# サイトに表示する直近の月数（これより古い論文は表示しない。DB には残る）
+display_months: 3
+
+# 抄録の自動取得（J-STAGE 記事ページから。表示対象で抄録が無いものを補完）
+fetch_abstracts: true
 
 # ========================================================================
 # メール通知（任意）。enabled: false ならコンソールとファイルにのみ出力します。
