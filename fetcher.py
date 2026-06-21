@@ -1,13 +1,28 @@
 #!/usr/bin/env python3
-"""論文取得アプリ.
+"""論文取得アプリ — 取得・保存・抄録補完を担うコア。
 
-設定ファイル(config.yaml)で指定したジャーナルから定期的に論文を取得し、
-SQLite で重複を排除して新着のみを保存・通知する。
+config.yaml で指定したジャーナルから論文を取得し、SQLite に重複排除して保存する。
+
+== 全体の流れ（1回の実行） ==
+    1. collect()         各取得元(Crossref / arXiv / J-STAGE)から論文メタデータを集める
+    2. 重複排除           (source, source_id) を主キーに、DB 未登録のものだけを「新着」とする
+    3. save_paper()       新着を SQLite(papers.db) に保存
+    4. enrich_abstracts() 表示対象(直近 display_months か月)で抄録が空のものを補完
+                          - J-STAGE: 記事ページから抜き出す（検索 API は抄録を返さない）
+                          - Crossref: OpenAlex に DOI で照会（Elsevier 等の欠落を補う）
+    5. notify()           新着をログ追記（任意でメール送信）
+
+このスクリプトは DB を更新するだけ。閲覧用の HTML は build_site.py が DB から生成する。
+日次の「取得→HTML生成→GitHub へ push」は daily.sh がまとめて実行する。
+
+== 重複排除と「新着」 ==
+    同じ論文を毎回取得しても、(source, source_id) が既に DB にあれば保存しない。
+    そのため何度実行しても増えるのは本当に新しい論文だけ。
 
 使い方:
     python3 fetcher.py                 # 1回実行（cron などから定期実行）
     python3 fetcher.py --config x.yaml # 設定ファイルを指定
-    python3 fetcher.py --list          # 保存済みの新着論文を一覧表示
+    python3 fetcher.py --list          # 保存済みの論文を一覧表示
     python3 fetcher.py --dry-run       # 取得するが保存・通知はしない
 """
 from __future__ import annotations
@@ -22,7 +37,7 @@ import sqlite3
 import sys
 import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from email.mime.text import MIMEText
 from pathlib import Path
 

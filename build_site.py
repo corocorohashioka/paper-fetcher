@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
-"""papers.db から静的な HTML を生成する（GitHub Pages 公開用）.
+"""papers.db から静的な HTML を1枚生成する（GitHub Pages 公開用）.
 
-サーバー不要。検索・絞り込み・既読/未読管理・新着ハイライトはすべて
-ページ内の JavaScript で動く（状態はブラウザの localStorage に保存）。
-出力先: docs/index.html （GitHub Pages の公開フォルダ）
+== 仕組み ==
+    DB の論文(直近 display_months か月分)を JSON にして HTML に丸ごと埋め込む。
+    ページを開くと、その JSON を元に JavaScript が一覧を描画する。
+    → サーバー不要。HTML ファイル1枚だけで完結するので GitHub Pages で配信できる。
+
+== ページ内 JS が担う機能（すべてクライアント側＝閲覧する端末内で完結） ==
+    - 検索（タイトル・著者・抄録）／雑誌・取得元での絞り込み
+    - 既読/未読の管理        … 既読IDの集合を localStorage に保存（端末ごと）
+    - 新着(NEW)ハイライト    … 「前回ページを開いた時刻」より後に取得された論文に印
+    これらの状態はブラウザ内(localStorage)に持つので、サーバーもログインも不要。
+
+出力先: docs/index.html（と Jekyll 抑止用の docs/.nojekyll）
 
 使い方:
     .venv/bin/python build_site.py
