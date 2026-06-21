@@ -36,6 +36,8 @@ LOG_PATH = BASE_DIR / "new_papers.log"
 # Crossref / arXiv は連絡先メールを付けると優先レーンで処理される（任意）。
 USER_AGENT = "paper-fetcher/1.0 (mailto:souichirou.coc.0619@gmail.com)"
 REQUEST_TIMEOUT = 30
+# OpenAlex は mailto を付けると優遇プール（高レート）で処理される。
+OPENALEX_MAILTO = "souichirou.coc.0619@gmail.com"
 
 
 @dataclass
@@ -340,23 +342,41 @@ def fetch_jstage_abstract(url: str) -> str:
     return re.sub(r"^\s*(抄\s*録|Abstract)\s*", "", text)
 
 
-def enrich_abstracts(conn: sqlite3.Connection, cutoff: dt.date) -> None:
-    """表示対象（cutoff 以降）で抄録が空の J-STAGE 論文に抄録を補完する。"""
-    rows = conn.execute(
-        "SELECT source, source_id, url FROM papers "
-        "WHERE source = 'jstage' AND (abstract IS NULL OR abstract = '') "
-        "AND published >= ? ORDER BY published DESC",
-        (cutoff.isoformat(),),
-    ).fetchall()
+def _reconstruct_inverted_abstract(inv: dict | None) -> str:
+    """OpenAlex の abstract_inverted_index から本文を復元する。"""
+    if not inv:
+        return ""
+    pos: dict[int, str] = {}
+    for word, positions in inv.items():
+        for p in positions:
+            pos[p] = word
+    return " ".join(pos[i] for i in sorted(pos))
+
+
+def fetch_openalex_abstract(doi: str) -> str:
+    """OpenAlex に DOI で照会して抄録を取得する。無ければ空文字。"""
+    resp = requests.get(
+        f"https://api.openalex.org/works/https://doi.org/{doi}",
+        params={"mailto": OPENALEX_MAILTO},  # 優遇プール（高レート）
+        headers={"User-Agent": USER_AGENT},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if resp.status_code != 200:
+        return ""
+    return _reconstruct_inverted_abstract(resp.json().get("abstract_inverted_index"))
+
+
+def _enrich(conn, label, rows, fetcher, sleep_sec):
+    """共通の抄録補完ループ。rows は (source, source_id, 引数) のタプル列。"""
     if not rows:
         return
-    print(f"  抄録の自動取得: 対象 {len(rows)} 件")
+    print(f"  抄録の自動取得({label}): 対象 {len(rows)} 件")
     done = 0
-    for source, source_id, url in rows:
+    for source, source_id, arg in rows:
         try:
-            ab = fetch_jstage_abstract(url)
+            ab = fetcher(arg)
         except Exception as e:  # noqa: BLE001 - 1件の失敗で止めない
-            print(f"  ! 抄録取得失敗 {url}: {e}", file=sys.stderr)
+            print(f"  ! 抄録取得失敗 [{label}] {source_id}: {e}", file=sys.stderr)
             ab = ""
         if ab:
             conn.execute(
@@ -364,9 +384,32 @@ def enrich_abstracts(conn: sqlite3.Connection, cutoff: dt.date) -> None:
                 (ab, source, source_id),
             )
             done += 1
-        time.sleep(1)  # 記事ページへのレート配慮
+        time.sleep(sleep_sec)
     conn.commit()
-    print(f"  抄録を {done} 件補完しました")
+    print(f"  → {label}: {done} 件補完")
+
+
+def enrich_abstracts(conn: sqlite3.Connection, cutoff: dt.date) -> None:
+    """表示対象（cutoff 以降）で抄録が空の論文を各取得元に応じて補完する。"""
+    since = cutoff.isoformat()
+
+    # J-STAGE: 記事ページから抄録を取得
+    js_rows = conn.execute(
+        "SELECT source, source_id, url FROM papers "
+        "WHERE source = 'jstage' AND (abstract IS NULL OR abstract = '') "
+        "AND published >= ? ORDER BY published DESC",
+        (since,),
+    ).fetchall()
+    _enrich(conn, "J-STAGE", js_rows, fetch_jstage_abstract, sleep_sec=1)
+
+    # Crossref: OpenAlex に DOI で照会（Elsevier 等の抄録欠落を補完）
+    cr_rows = conn.execute(
+        "SELECT source, source_id, source_id FROM papers "
+        "WHERE source = 'crossref' AND (abstract IS NULL OR abstract = '') "
+        "AND published >= ? ORDER BY published DESC",
+        (since,),
+    ).fetchall()
+    _enrich(conn, "OpenAlex", cr_rows, fetch_openalex_abstract, sleep_sec=0.2)
 
 
 # ------------------------------------------------------------------------
