@@ -115,6 +115,21 @@ push 後、GitHub のリポジトリ画面で **Settings → Pages → Build and
 `daily.sh` が「取得 → サイト生成 → push」を一括で行います。下記の cron 例を参照。
 
 ## 定期実行（毎日自動）
+
+### 方式A: GitHub Actions（推奨・Mac 不要）
+`.github/workflows/daily.yml` が毎日 08:00（台北/日本時間）に GitHub 上で
+「取得 → サイト生成 → docs/ を push」を実行します。Mac がスリープでも電源オフでも回ります。
+
+- 対象ジャーナルの設定は `config.example.yaml` をそのまま使います（編集すれば次回実行から反映）
+- 蓄積データ `papers.db` は、リポジトリのリリース `db` の添付ファイルとして保存・復元します
+  （Git 履歴を膨らませずに毎日の蓄積を引き継ぐため）
+- 手動実行は GitHub の **Actions タブ → daily-fetch → Run workflow**
+
+初回だけリポジトリ側の設定が必要です:
+**Settings → Actions → General → Workflow permissions** を
+`Read and write permissions` にして Save（docs/ の push に必要）。
+
+### 方式B: macOS の launchd（ローカル実行）
 macOS では launchd（標準のスケジューラ）で毎朝8時に `daily.sh`（取得→生成→push）を
 実行します。設定ファイルは `~/Library/LaunchAgents/com.paperfetcher.daily.plist`。
 
