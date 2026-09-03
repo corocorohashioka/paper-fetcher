@@ -1,0 +1,84 @@
+# ========================================================================
+# 毎日 GitHub 上で「論文取得 → サイト生成 → docs/ を更新」まで自動実行する。
+# Mac の電源・スリープ状態に関係なく回るので、daily.sh + launchd の代わりに使える。
+#
+#   設定(対象ジャーナル) : config.example.yaml をそのまま使う（編集すれば次回実行から反映）
+#   蓄積データ(papers.db) : リリース "db" の添付ファイルとして保存・復元する
+#                           （履歴を膨らませずに毎日の蓄積を引き継ぐため）
+#   公開                  : docs/ を main に push → GitHub Pages に反映
+# ========================================================================
+name: daily-fetch
+
+on:
+  schedule:
+    # 00:00 UTC = 08:00 (台北 / 日本時間)。GitHub 側の混雑で数十分遅れることがある。
+    - cron: "0 0 * * *"
+  workflow_dispatch:        # 手動実行（Actions タブの Run workflow）
+
+permissions:
+  contents: write           # docs/ の push と papers.db の保存に必要
+
+concurrency:
+  group: daily-fetch
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TZ: Asia/Taipei
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 依存パッケージをインストール
+        run: pip install -r requirements.txt
+
+      - name: 設定ファイルを用意
+        # config.yaml は .gitignore 済み（ローカル用）。CI では公開設定をそのまま使う。
+        run: cp config.example.yaml config.yaml
+
+      - name: 前回までの papers.db を復元
+        run: |
+          gh release download db --pattern papers.db --clobber \
+            || echo "既存の DB なし（初回実行）"
+
+      - name: 論文を取得して DB に保存
+        run: python fetcher.py
+
+      - name: 静的サイトを生成
+        run: python build_site.py
+
+      - name: papers.db を保存（次回実行に引き継ぐ）
+        run: |
+          gh release view db >/dev/null 2>&1 \
+            || gh release create db --title "papers.db (state)" \
+                 --notes "日次実行で使う SQLite の蓄積データ。中身は論文メタデータのみ。"
+          gh release upload db papers.db --clobber
+
+      - name: docs/ の更新をコミットして push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain docs/)" ]; then
+            git add docs/
+            git commit -m "Update papers $(date '+%Y-%m-%d')"
+            git push
+          else
+            echo "新規論文なし（コミットなし）"
+          fi
+
+      - name: 新着ログをサマリに出力
+        if: always()
+        run: |
+          if [ -f new_papers.log ]; then
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 40 new_papers.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
