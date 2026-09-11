@@ -7,8 +7,8 @@ __pycache__/
 papers.db
 *.log
 
-# 秘密情報を含む可能性のある実設定（config.example.yaml のみ公開）
-config.yaml
+# config.yaml は GitHub Actions が使うのでリポジトリに含める。
+# パスワード等の秘密情報は config.yaml に書かず、環境変数 / GitHub Secrets で渡す。
 
 # macOS
 .DS_Store

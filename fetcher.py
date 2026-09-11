@@ -13,7 +13,7 @@ config.yaml で指定したジャーナルから論文を取得し、SQLite に�
     5. notify()           新着をログ追記（任意でメール送信）
 
 このスクリプトは DB を更新するだけ。閲覧用の HTML は build_site.py が DB から生成する。
-日次の「取得→HTML生成→GitHub へ push」は daily.sh がまとめて実行する。
+日次の「取得→HTML生成→GitHub へ push」は GitHub Actions(.github/workflows/daily.yml)が実行する。
 
 == 重複排除と「新着」 ==
     同じ論文を毎回取得しても、(source, source_id) が既に DB にあれば保存しない。
@@ -31,6 +31,7 @@ import argparse
 import calendar
 import datetime as dt
 import html as html_mod
+import os
 import re
 import smtplib
 import sqlite3
@@ -454,15 +455,19 @@ def notify(papers: list[Paper], email_cfg: dict) -> None:
     if not email_cfg.get("enabled"):
         return
 
+    # 認証情報は環境変数を優先（公開リポジトリの config.yaml に秘密情報を書かないため）
+    username = os.environ.get("SMTP_USERNAME") or email_cfg.get("username", "")
+    password = os.environ.get("SMTP_PASSWORD") or email_cfg.get("password", "")
+
     msg = MIMEText(body, "plain", "utf-8")
     msg["Subject"] = f"[論文取得] 新着 {len(papers)} 件 "\
                      f"({dt.date.today().isoformat()})"
-    msg["From"] = email_cfg.get("from_addr") or email_cfg["username"]
+    msg["From"] = email_cfg.get("from_addr") or username
     msg["To"] = email_cfg["to_addr"]
 
     with smtplib.SMTP(email_cfg["smtp_host"], email_cfg["smtp_port"]) as server:
         server.starttls()
-        server.login(email_cfg["username"], email_cfg["password"])
+        server.login(username, password)
         server.send_message(msg)
     print(f"メールを {email_cfg['to_addr']} に送信しました。")
 
@@ -471,8 +476,14 @@ def notify(papers: list[Paper], email_cfg: dict) -> None:
 # メイン
 # ------------------------------------------------------------------------
 def load_config(path: Path) -> dict:
-    with path.open(encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    text = path.read_text(encoding="utf-8")
+    # 全角スペースのインデントは YAML の分かりにくいエラーになるので、先に行番号付きで知らせる
+    bad = [i for i, line in enumerate(text.splitlines(), 1)
+           if re.match(r"^[ \t]*\u3000", line)]
+    if bad:
+        sys.exit(f"{path.name}: 行頭に全角スペースがあります（{', '.join(map(str, bad))} 行目）。"
+                 "インデントは半角スペースにしてください。")
+    return yaml.safe_load(text)
 
 
 def collect(cfg: dict) -> list[Paper]:

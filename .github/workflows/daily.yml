@@ -1,8 +1,9 @@
 # ========================================================================
 # 毎日 GitHub 上で「論文取得 → サイト生成 → docs/ を更新」まで自動実行する。
-# Mac の電源・スリープ状態に関係なく回るので、daily.sh + launchd の代わりに使える。
+# Mac の電源・スリープ状態に関係なく回る。日次更新はこのワークフローだけが担当する。
 #
-#   設定(対象ジャーナル) : config.example.yaml をそのまま使う（編集すれば次回実行から反映）
+#   設定(対象ジャーナル) : リポジトリの config.yaml を使う
+#                           （Mac で編集して push すると、その時点で自動実行される）
 #   蓄積データ(papers.db) : リリース "db" の添付ファイルとして保存・復元する
 #                           （履歴を膨らませずに毎日の蓄積を引き継ぐため）
 #   公開                  : docs/ を main に push → GitHub Pages に反映
@@ -11,9 +12,16 @@ name: daily-fetch
 
 on:
   schedule:
-    # 00:00 UTC = 08:00 (台北 / 日本時間)。GitHub 側の混雑で数十分遅れることがある。
+    # 00:00 UTC = 08:00 台北 / 09:00 日本時間。GitHub 側の混雑で数十分遅れることがある。
     - cron: "0 0 * * *"
   workflow_dispatch:        # 手動実行（Actions タブの Run workflow）
+  push:                     # 設定やコードを push したら、翌朝を待たずに実行
+    branches: [main]
+    paths:
+      - config.yaml
+      - fetcher.py
+      - build_site.py
+      - requirements.txt
 
 permissions:
   contents: write           # docs/ の push と papers.db の保存に必要
@@ -28,6 +36,9 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       TZ: Asia/Taipei
+      # メール通知を使う場合だけ Settings → Secrets and variables → Actions に登録（未登録なら空）
+      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
 
     steps:
       - uses: actions/checkout@v4
@@ -39,10 +50,6 @@ jobs:
 
       - name: 依存パッケージをインストール
         run: pip install -r requirements.txt
-
-      - name: 設定ファイルを用意
-        # config.yaml は .gitignore 済み（ローカル用）。CI では公開設定をそのまま使う。
-        run: cp config.example.yaml config.yaml
 
       - name: 前回までの papers.db を復元
         run: |
@@ -69,6 +76,9 @@ jobs:
           if [ -n "$(git status --porcelain docs/)" ]; then
             git add docs/
             git commit -m "Update papers $(date '+%Y-%m-%d')"
+            # 実行中に config.yaml などが push されていても取り込んでから push する
+            # （このジョブが変更するのは docs/ だけなので、衝突しない）
+            git pull --rebase origin main
             git push
           else
             echo "新規論文なし（コミットなし）"

@@ -1,6 +1,8 @@
 # ========================================================================
 # 論文取得アプリ 設定ファイル
 # 対象ジャーナル・キーワード・通知先をここで指定します。
+# GitHub Actions もこのファイルを使います。編集したら push すると取得が自動で走ります。
+# インデントは必ず半角スペースで（全角スペースが混ざると読み込みに失敗します）。
 # ========================================================================
 
 sources:
@@ -9,7 +11,7 @@ sources:
   # （オンライン版・印刷版どちらの ISSN でも可）
   crossref:
     enabled: true
-    rows: 60          # 1誌あたり取得する「最新何件」か
+    rows: 30          # 1誌あたり取得する「最新何件」か
     years_back: 2     # これより古い論文は除外する
     journals:
       - name: "Food Policy"
@@ -28,6 +30,8 @@ sources:
         issn: "1364-985X"
       - name: "Applied Economic Perspectives and Policy"
         issn: "2040-5790"
+      - name: "Ecological Economics"
+        issn: "1873-6106"
 
   # --- J-STAGE: 日本の学会誌（Crossref に無い和文誌に対応） ---
   # 雑誌コード(cdjournal)で指定します。各誌のコードは記事URL中に含まれます
@@ -71,8 +75,9 @@ fetch_abstracts: true
 
 # ========================================================================
 # メール通知（任意）。enabled: false ならコンソールとファイルにのみ出力します。
-# Gmail を使う場合は「アプリパスワード」を発行して password に設定してください。
-# https://myaccount.google.com/apppasswords
+# このファイルは公開リポジトリに push されるので、username / password は空のままにし、
+# 環境変数 SMTP_USERNAME / SMTP_PASSWORD（Actions では GitHub Secrets）で渡してください。
+# Gmail の場合はアプリパスワードを使います: https://myaccount.google.com/apppasswords
 # ========================================================================
 email:
   enabled: false
