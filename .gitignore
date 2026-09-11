@@ -18,3 +18,6 @@ papers.db
 
 # R
 .Rhistory
+
+# README はローカル（Mac mini）でのみ参照する。公開リポジトリには含めない。
+README.md
