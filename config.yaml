@@ -22,16 +22,20 @@ sources:
         issn: "0021-857X"
       - name: "European Review of Agricultural Economics"
         issn: "0165-1587"
-      - name: "Land Use Policy"
-        issn: "0264-8377"
       - name: "Agricultural Economics"
         issn: "0169-5150"
       - name: "Australian Journal of Agricultural and Resource Economics"
         issn: "1364-985X"
       - name: "Applied Economic Perspectives and Policy"
         issn: "2040-5790"
+      - name: "Journal of Environmental Economics and Management"
+        issn: "0095-0696"
+      - name: "Journal of the Association of Environmental and Resource Economists"
+        issn: "2333-5955"
       - name: "Ecological Economics"
-        issn: "1873-6106"
+        issn: "0921-8009"
+      - name: "Environmental Economics and Policy Studies"
+        issn: "1432-847X"
 
   # --- J-STAGE: 日本の学会誌（Crossref に無い和文誌に対応） ---
   # 雑誌コード(cdjournal)で指定します。各誌のコードは記事URL中に含まれます
